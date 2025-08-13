@@ -246,7 +246,7 @@ runs:
           fi
           # Extract the total coverage percentage
           grep -E "^TOTAL " .coverage-output.diff-branch | \
-            awk '{printf "%.0f", (1 - $3/$2) * 100}' > .coverage-total.diff-branch
+            awk '{printf "%.8f", (1 - $3/$2) * 100}' > .coverage-total.diff-branch
           echo "Diff-branch coverage: $(cat .coverage-total.diff-branch)%"
         } else {
           echo "Diff-branch coverage file not found, cannot compare coverage rates."
@@ -258,13 +258,15 @@ runs:
     - name: Get total
       run: |
         grep -E "^TOTAL " .coverage-output | \
-          awk '{printf "%.0f", (1 - $3/$2) * 100}' > .coverage-total
+          awk '{printf "%.8f", (1 - $3/$2) * 100}' > .coverage-total
       shell: bash
 
     - name: Store coverage percent
       id: coverage_percent
       run: |
         echo "coverage_total=$(cat .coverage-total)" >> $GITHUB_OUTPUT
+        # Create rounded version for badge display
+        echo "coverage_total_rounded=$(printf "%.0f" $(cat .coverage-total))" >> $GITHUB_OUTPUT
         BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
         echo "diff_storage_branch=$BRANCH" >> $GITHUB_ENV
         mkdir -p ${{ inputs.diff-storage }}/data/${BRANCH}/${{ inputs.storage-subdirectory }}
@@ -276,7 +278,7 @@ runs:
       id: badge
       with:
         label: 'Test Coverage'
-        status: "${{ steps.coverage_percent.outputs.coverage_total }}%"
+        status: "${{ steps.coverage_percent.outputs.coverage_total_rounded }}%"
         color: ${{
           steps.coverage_percent.outputs.coverage_total > 90 && 'green'              ||
           steps.coverage_percent.outputs.coverage_total > 80 && 'yellow,green'       ||
