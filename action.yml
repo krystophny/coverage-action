@@ -116,10 +116,21 @@ runs:
 
     - name: Generate text report
       run: |
+        echo "📊 Debug: Starting text report generation"
+        echo "Input path: ${{ inputs.path }}"
+        ls -lh ${{ inputs.path }} || echo "WARNING: Input file not found!"
+        
         mkdir -p coverage-action
-        cp ${{ inputs.path }} coverage-action/
-        pycobertura show ${{ inputs.path }} --output .coverage-output
-        cat .coverage-output
+        cp ${{ inputs.path }} coverage-action/ || echo "WARNING: Failed to copy input file"
+        
+        echo "Running pycobertura show..."
+        pycobertura show ${{ inputs.path }} --output .coverage-output || {
+          echo "WARNING: pycobertura show failed, checking file content..."
+          head -20 ${{ inputs.path }} || echo "Cannot read input file"
+        }
+        
+        echo "Generated text report:"
+        cat .coverage-output || echo "WARNING: No text output generated"
       shell: bash
 
     - name: Fetch report from ${{ inputs.diff-storage }}
@@ -193,20 +204,32 @@ runs:
     - name: Generate diff against ${{ inputs.diff-branch }}
       if: contains(inputs.diff, 'true')
       run: |
+        echo "📊 Debug: Starting diff generation"
         echo "storage_subdirectory = '${{ inputs.storage-subdirectory }}'"
+        echo "diff-branch = '${{ inputs.diff-branch }}'"
+        echo "diff-storage = '${{ inputs.diff-storage }}'"
+        
         pushd ${{ inputs.diff-storage }}
         git checkout ${{ inputs.diff-storage }} || touch ${{ inputs.diff-storage }}-not-found
+        echo "Current branch in storage repo:"
+        git branch --show-current || echo "Not on a branch"
+        echo "Files in storage repo:"
+        ls -la data/ 2>/dev/null || echo "No data directory"
         popd
+        
+        echo "Looking for baseline file: ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml"
         if [[ -f "${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml" && (! -f ${{ inputs.diff-storage }}-not-found) ]]
         then {
+          echo "✅ Baseline file found, generating diff..."
           pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
             ${{ inputs.path }} \
             --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
             # Save status both in case of success and failure.
             echo "pycobertura_status=$pycobertura_status" >> $GITHUB_ENV
-          cat .coverage-output.diff
+          echo "Diff output:"
+          cat .coverage-output.diff || echo "No diff output generated"
         } else {
-          echo "${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml not found! Not diffing."
+          echo "⚠️ ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml not found! Not diffing."
         }
         fi
       shell: bash
@@ -296,11 +319,18 @@ runs:
     - name: Generate issue comment body
       if: contains(inputs.publish, 'true')
       run: |
+        echo "📊 Debug: Generating comment body"
+        echo "Repository visibility: ${{ steps.repository-visibility.outputs.result }}"
+        echo "Coverage total: ${{ steps.coverage_percent.outputs.coverage_total }}%"
+        
         BRANCH=${GITHUB_HEAD_REF:-${GITHUB_REF#refs/heads/}}
+        echo "Branch: $BRANCH"
+        
         if [[ "${{ steps.repository-visibility.outputs.result }}" == "public" ]]
         then {
           # URL encoding for branch name
           URL_ENCODED_BRANCH=$(python3 -c 'import urllib.parse; print(urllib.parse.quote_plus("${{ env.diff_storage_branch }}"))')
+          echo "Badge URL: https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ inputs.diff-storage }}/data/${URL_ENCODED_BRANCH}/${{ inputs.storage-subdirectory }}/badge.svg"
           echo -e "![badge](https://raw.githubusercontent.com/${{ github.repository_owner }}/${{ github.event.repository.name }}/${{ inputs.diff-storage }}/data/${URL_ENCODED_BRANCH}/${{ inputs.storage-subdirectory }}/badge.svg)\n\n" > .coverage-output.final
         }
         else {
@@ -351,6 +381,17 @@ runs:
         fi
       shell: bash
 
+    - name: Debug comment content
+      if: contains(inputs.publish, 'true')
+      run: |
+        echo "📊 Debug: Comment to be posted"
+        echo "Header for sticky comment: ${{ inputs.path }}"
+        echo "Comment content preview (first 500 chars):"
+        head -c 500 .coverage-output.final || echo "No comment content"
+        echo ""
+        echo "Full comment size: $(wc -c < .coverage-output.final) bytes"
+      shell: bash
+    
     - name: Post as comment
       if: contains(inputs.publish, 'true')
       uses: marocchino/sticky-pull-request-comment@v2
