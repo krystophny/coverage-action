@@ -116,21 +116,10 @@ runs:
 
     - name: Generate text report
       run: |
-        echo "📊 Debug: Starting text report generation"
-        echo "Input path: ${{ inputs.path }}"
-        ls -lh ${{ inputs.path }} || echo "WARNING: Input file not found!"
-        
         mkdir -p coverage-action
-        cp ${{ inputs.path }} coverage-action/ || echo "WARNING: Failed to copy input file"
-        
-        echo "Running pycobertura show..."
-        pycobertura show ${{ inputs.path }} --output .coverage-output || {
-          echo "WARNING: pycobertura show failed, checking file content..."
-          head -20 ${{ inputs.path }} || echo "Cannot read input file"
-        }
-        
-        echo "Generated text report:"
-        cat .coverage-output || echo "WARNING: No text output generated"
+        cp ${{ inputs.path }} coverage-action/
+        pycobertura show ${{ inputs.path }} --output .coverage-output
+        cat .coverage-output
       shell: bash
 
     - name: Fetch report from ${{ inputs.diff-storage }}
