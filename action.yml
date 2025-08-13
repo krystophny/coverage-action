@@ -102,12 +102,10 @@ branding:  # https://feathericons.com/
 runs:
   using: composite
   steps:
-    - name: Verify pycobertura is available
+    - name: Verify Python is available
       run: |
-        echo "📦 Using pre-installed pycobertura..."
+        echo "📦 Using pre-installed Python and pycobertura..."
         python3 --version
-        which pycobertura
-        echo "pycobertura is available at: $(which pycobertura)"
       shell: bash
 
     - name: Get branch names
@@ -118,7 +116,13 @@ runs:
       run: |
         mkdir -p coverage-action
         cp ${{ inputs.path }} coverage-action/
-        pycobertura show ${{ inputs.path }} --output .coverage-output
+        # Try direct command first, fall back to Python module
+        if command -v pycobertura &> /dev/null; then
+          pycobertura show ${{ inputs.path }} --output .coverage-output
+        else
+          echo "Using pycobertura as Python module..."
+          python3 -m pycobertura show ${{ inputs.path }} --output .coverage-output
+        fi
         cat .coverage-output
       shell: bash
 
@@ -210,9 +214,15 @@ runs:
         if [[ -f "${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml" && (! -f ${{ inputs.diff-storage }}-not-found) ]]
         then {
           echo "✅ Baseline file found, generating diff..."
-          pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
-            ${{ inputs.path }} \
-            --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
+          if command -v pycobertura &> /dev/null; then
+            pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+              ${{ inputs.path }} \
+              --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
+          else
+            python3 -m pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+              ${{ inputs.path }} \
+              --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
+          fi
             # Save status both in case of success and failure.
             echo "pycobertura_status=$pycobertura_status" >> $GITHUB_ENV
           echo "Diff output:"
@@ -229,7 +239,11 @@ runs:
         if [[ -f "${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml" ]]
         then {
           # Generate a text report for the diff-branch coverage
-          pycobertura show ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml --output .coverage-output.diff-branch
+          if command -v pycobertura &> /dev/null; then
+            pycobertura show ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml --output .coverage-output.diff-branch
+          else
+            python3 -m pycobertura show ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml --output .coverage-output.diff-branch
+          fi
           # Extract the total coverage percentage
           grep -E "^TOTAL " .coverage-output.diff-branch | \
             awk '{printf "%.8f", (1 - $3/$2) * 100}' > .coverage-total.diff-branch
