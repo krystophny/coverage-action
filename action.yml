@@ -102,16 +102,12 @@ branding:  # https://feathericons.com/
 runs:
   using: composite
   steps:
-    - name: Install pycobertura
+    - name: Verify pycobertura is available
       run: |
-        echo "📦 Installing pycobertura using pre-installed Python..."
+        echo "📦 Using pre-installed pycobertura..."
         python3 --version
-        pip3 --version
-        pip3 install --user pycobertura==3.0.0
-        # Ensure pycobertura is in PATH
-        export PATH="$HOME/.local/bin:$PATH"
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        which pycobertura || echo "pycobertura not in PATH yet"
+        which pycobertura
+        pycobertura --version
       shell: bash
 
     - name: Get branch names
