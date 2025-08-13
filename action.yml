@@ -107,7 +107,7 @@ runs:
         echo "📦 Using pre-installed pycobertura..."
         python3 --version
         which pycobertura
-        pycobertura --version
+        echo "pycobertura is available at: $(which pycobertura)"
       shell: bash
 
     - name: Get branch names
