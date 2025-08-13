@@ -116,12 +116,14 @@ runs:
       run: |
         mkdir -p coverage-action
         cp ${{ inputs.path }} coverage-action/
-        # Try direct command first, fall back to Python module
+        # Generate both text (for TOTAL extraction) and markdown reports
         if command -v pycobertura &> /dev/null; then
           pycobertura show ${{ inputs.path }} --output .coverage-output
+          pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
         else
           echo "Using pycobertura as Python module..."
           python3 -m pycobertura show ${{ inputs.path }} --output .coverage-output
+          python3 -m pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
         fi
         cat .coverage-output
       shell: bash
@@ -218,10 +220,16 @@ runs:
             pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
               ${{ inputs.path }} \
               --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
+            pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+              ${{ inputs.path }} \
+              --output .coverage-output.diff.md || true
           else
             python3 -m pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
               ${{ inputs.path }} \
               --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
+            python3 -m pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+              ${{ inputs.path }} \
+              --output .coverage-output.diff.md || true
           fi
             # Save status both in case of success and failure.
             echo "pycobertura_status=$pycobertura_status" >> $GITHUB_ENV
@@ -347,15 +355,23 @@ runs:
         then {
           if [[ "${{ inputs.togglable-report }}" == "true" ]]
           then {
-            echo -e "<details>\n\n" >> .coverage-output.final
+            echo -e "<details>\n<summary>📊 Coverage Report</summary>\n\n" >> .coverage-output.final
           }
           fi
-          echo -e "\`\`\`" >> .coverage-output.final
-          cat .coverage-output >> .coverage-output.final
-          echo -e "\n\`\`\`\n" >> .coverage-output.final
+          # Use markdown format if available, fallback to text in code block
+          if [[ -f .coverage-output.md ]]
+          then {
+            cat .coverage-output.md >> .coverage-output.final
+          }
+          else {
+            echo -e "\`\`\`" >> .coverage-output.final
+            cat .coverage-output >> .coverage-output.final
+            echo -e "\n\`\`\`" >> .coverage-output.final
+          }
+          fi
           if [[ "${{ inputs.togglable-report }}" == "true" ]]
           then {
-            echo -e "</details>\n\n" >> .coverage-output.final
+            echo -e "\n</details>\n\n" >> .coverage-output.final
           }
           fi
         }
@@ -363,12 +379,23 @@ runs:
           echo -e "\n" >> .coverage-output.final
         }
         fi
-        if [[ "${{ inputs.diff }}" == "true" && -f .coverage-output.diff ]]
+        if [[ "${{ inputs.diff }}" == "true" ]]
         then {
-          echo -e "### Diff against ${{ inputs.diff-branch }}\n" >> .coverage-output.final
-          echo -e "\`\`\`" >> .coverage-output.final
-          cat .coverage-output.diff >> .coverage-output.final
-          echo -e "\n\`\`\`\n" >> .coverage-output.final
+          # Use markdown diff if available
+          if [[ -f .coverage-output.diff.md ]]
+          then {
+            echo -e "### Diff against ${{ inputs.diff-branch }}\n" >> .coverage-output.final
+            cat .coverage-output.diff.md >> .coverage-output.final
+            echo -e "\n" >> .coverage-output.final
+          }
+          elif [[ -f .coverage-output.diff ]]
+          then {
+            echo -e "### Diff against ${{ inputs.diff-branch }}\n" >> .coverage-output.final
+            echo -e "\`\`\`" >> .coverage-output.final
+            cat .coverage-output.diff >> .coverage-output.final
+            echo -e "\n\`\`\`\n" >> .coverage-output.final
+          }
+          fi
         }
         fi
         COMMIT_SHA="${{ github.sha }}"
