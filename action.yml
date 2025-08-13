@@ -81,6 +81,10 @@ inputs:
     description: Make the code coverage report togglable.
     required: false
     default: false
+  report-format:
+    description: Format for the coverage report (text or markdown).
+    required: false
+    default: text
   exclude-detailed-coverage:
     description: |
       Whether a detailed coverage report should be excluded from the PR comment.
@@ -116,14 +120,20 @@ runs:
       run: |
         mkdir -p coverage-action
         cp ${{ inputs.path }} coverage-action/
-        # Generate both text (for TOTAL extraction) and markdown reports
+        # Always generate text format for TOTAL extraction
         if command -v pycobertura &> /dev/null; then
           pycobertura show ${{ inputs.path }} --output .coverage-output
-          pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
+          # Generate markdown if requested
+          if [[ "${{ inputs.report-format }}" == "markdown" ]]; then
+            pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
+          fi
         else
           echo "Using pycobertura as Python module..."
           python3 -m pycobertura show ${{ inputs.path }} --output .coverage-output
-          python3 -m pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
+          # Generate markdown if requested
+          if [[ "${{ inputs.report-format }}" == "markdown" ]]; then
+            python3 -m pycobertura show ${{ inputs.path }} --format markdown --output .coverage-output.md
+          fi
         fi
         cat .coverage-output
       shell: bash
@@ -220,16 +230,22 @@ runs:
             pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
               ${{ inputs.path }} \
               --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
-            pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
-              ${{ inputs.path }} \
-              --output .coverage-output.diff.md || true
+            # Generate markdown diff if requested
+            if [[ "${{ inputs.report-format }}" == "markdown" ]]; then
+              pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+                ${{ inputs.path }} \
+                --output .coverage-output.diff.md || true
+            fi
           else
             python3 -m pycobertura diff --no-color --no-source ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
               ${{ inputs.path }} \
               --output .coverage-output.diff && pycobertura_status=$? || pycobertura_status=$?
-            python3 -m pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
-              ${{ inputs.path }} \
-              --output .coverage-output.diff.md || true
+            # Generate markdown diff if requested
+            if [[ "${{ inputs.report-format }}" == "markdown" ]]; then
+              python3 -m pycobertura diff --no-color --no-source --format markdown ${{ inputs.diff-storage }}/data/${{ inputs.diff-branch }}/${{ inputs.storage-subdirectory }}/coverage.xml \
+                ${{ inputs.path }} \
+                --output .coverage-output.diff.md || true
+            fi
           fi
             # Save status both in case of success and failure.
             echo "pycobertura_status=$pycobertura_status" >> $GITHUB_ENV
@@ -358,8 +374,8 @@ runs:
             echo -e "<details>\n<summary>📊 Coverage Report</summary>\n\n" >> .coverage-output.final
           }
           fi
-          # Use markdown format if available, fallback to text in code block
-          if [[ -f .coverage-output.md ]]
+          # Use format based on configuration
+          if [[ "${{ inputs.report-format }}" == "markdown" && -f .coverage-output.md ]]
           then {
             cat .coverage-output.md >> .coverage-output.final
           }
@@ -381,8 +397,8 @@ runs:
         fi
         if [[ "${{ inputs.diff }}" == "true" ]]
         then {
-          # Use markdown diff if available
-          if [[ -f .coverage-output.diff.md ]]
+          # Use format based on configuration
+          if [[ "${{ inputs.report-format }}" == "markdown" && -f .coverage-output.diff.md ]]
           then {
             echo -e "### Diff against ${{ inputs.diff-branch }}\n" >> .coverage-output.final
             cat .coverage-output.diff.md >> .coverage-output.final
